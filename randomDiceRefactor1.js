@@ -44,13 +44,79 @@ const dotLocation = [
     {x: locationGuide[2], y: locationGuide[2]},
 ];
 const diceNumGuide = [[3], [0,6], [0,3,6], [0,1,5,6], [0,1,3,5,6], [0,1,2,4,5,6]];
+const monsters = [];
+
 
 function init(){
     for(let i=0; i<10; i++){
         dice[i] = new Dice(diceLocation[i].x, diceLocation[i].y);
         //dice[i].active(false);
     }
-    board();
+    make.makeMonster();
+    setInterval(board,10);
+}
+const MONSTER= [
+    {
+        x: 100,
+        y: 100,
+        hp: 100,
+        width: 50,
+        height: 50,
+    }, // type = 0
+    {
+        x: 200,
+        y: 100,
+        hp: 500,
+        width: 100,
+        height: 100
+    } // type = 1
+];
+
+class Bullet {
+    constructor(x, y){
+        self = this;
+        this.x = x;
+        this.y = y;
+        this.target = null;
+        this.moveToTarget();
+    }
+
+    moveToTarget(){
+        if(this.target === null){
+            return;
+        }
+        let mx = this.target.x + this.target.width/2;
+        let my = this.target.y + this.target.height/2;
+        console.log(mx, my, this.x, this.y);
+        if(mx == this.x && my == this.y){
+            console.log('end');
+            return 1;
+        }
+
+        if (this.x > mx) {
+            console.log('up');
+            this.x-=1;
+        }
+        else if(this.x < mx){
+            console.log('down');
+            this.x+=1;
+        }
+
+        if (this.y > my){
+            this.y-=1;
+        }
+        else if (this.y < my){
+            this.y+=1;
+        }
+
+        draw.drawFillArc(this.x, this.y, 'red');
+        // setTimeout(this.moveToTarget, 10);
+        return 0;
+
+    }
+    setTarget(target){
+        this.target = target;
+    }
 }
 
 class Dot {
@@ -62,26 +128,44 @@ class Dot {
         this.damage = 10;
         this.activeFlag = false;
         this.target = null;
+        this.bullets = [];
     }
 
     active(){
-        self.activeFlag = true;
+        this.activeFlag = true;
+        this.makeBullets();
     }
 
     disabled(){
         self.activeFlag = false;
     }
 
-    attack(target){
-        self.moveToTarget(self.x, self.y, target);
+    makeBullets(){
+        this.bullets.push(new Bullet(this.x, this.y));
+        console.log('make');
+    }
+
+    attack(){
+        console.log(this.bullets);
+        for(let i = 0; i<this.bullets.length; i++){
+            let flag = this.bullets[i].moveToTarget();
+            if(flag){
+                console.log('delete');
+                this.bullets.splice(i, 1);
+            }
+        }
     }
 
     setTarget(target){
         self.target = target;
+        this.bullets.map(v=>{
+            v.setTarget(target);
+        });
+
+        this.attack();
     }
 
     moveToTarget(x, y, target){
-        console.log("move");
         let mx = target.x + target.width/2;
         let my = target.y + target.height/2;
 
@@ -98,17 +182,12 @@ class Dot {
             y++;
         }
         draw.drawFillArc(x, y, 'red');
-        if(mx!==x || my!==y){
-            setTimeout(self.moveToTarget, 10, x, y, target);
 
-        }
     }
 
     inflictDamage(target){
-        console.log('target, damage', target.getHp());
         let targetHp = target.getHp() - self.damage;
         if(targetHp <= 0){
-            console.log('stop');
             clearInterval(self.timer);
         }
         target.getDamage(self.damage);
@@ -125,20 +204,24 @@ class Dice {
         this.dots = [];
         this.active = false;
         for (let i = 0 ; i < 7 ; i ++){
-            this.dots[i] = new Dot(dotLocation[i].x, dotLocation[i].y);
+            this.dots[i] = new Dot(x + dotLocation[i].x, y + dotLocation[i].y);
         }
-        this.dots[diceNumGuide[0]].active();
+
     }
 
     setActive(){
         this.active = true;
-        board();
+        this.dots[diceNumGuide[0]].active();
+        let index = this.getActiveDots();
+        for(let i = 0; i<index.length; i++){
+            this.dots[i].makeBullets();
+        }
     }
 
     setTarget(target){
-        let activeIndexes = self.getActiveDots();
+        let activeIndexes = this.getActiveDots();
         for(let i = 0;i <activeIndexes.length; i++){
-            self.dots[activeIndexes[i]].setTarget(target);
+            this.dots[activeIndexes[i]].setTarget(target);
         }
     }
 
@@ -153,20 +236,42 @@ class Dice {
         return indexes;
     }
 
-    attack(target){
+    attack(){
         let actives = this.getActiveDots();
-        console.log(actives);
         actives.map(value => {
-            this.dots[value].attack(target);
+            this.dots[value].attack();
         })
+    }
+}
+
+class Monster {
+    constructor(type){
+        this.x = MONSTER[type].x;
+        this.y = MONSTER[type].y;
+        this.hp = MONSTER[type].hp;
+        this.width = MONSTER[type].width;
+        this.height = MONSTER[type].height;
+    }
+
+    getDamage(damage){
+        this.hp -= damage;
+        draw.drawMonster(this);
+    }
+
+    getHp(){
+        return this.hp;
     }
 }
 
 const make = {
     makeDice: function(){
-        let index = getRandumNum(0, 10);
-        dice[index].setActive();
-
+        let index = getRandomNum(0, 10);
+        if(index !== null){
+            dice[index].setActive();
+        }
+    },
+    makeMonster: function(){
+        monsters.push(new Monster(0));
     }
 }
 
@@ -209,25 +314,31 @@ const draw = {
     drawDot : function(dice){
         diceNumGuide[dice.num - 1].map(value => {
             this.drawFillArc(dotLocation[value].x + dice.x, dotLocation[value].y + dice.y, 'blue');
-
         });
     },
 
-    drawMonster : function(monster){
-        this.drawFillRect(monster.x, monster.y, monster.width, monster.height, 'black');
-        this.drawText(15, 'white', monster.hp, monster.x, monster.y);
+    drawMonster : function(monsters){
+        monsters.map(monster => {
+            this.drawFillRect(monster.x, monster.y, monster.width, monster.height, 'black');
+            this.drawText(15, 'white', monster.hp, monster.x, monster.y);
+        })
+
     },
 
 
 };
 
 function board(){
+    console.log('clear');
+    gameCtx.clearRect(0, 0, gameCanvas.width, gameCanvas.height);
     draw.drawStrokeRect(diceBoardX, diceBoardY, boardWidth, boardHeight, 'gray');
     // draw dice board
 
+    draw.drawMonster(monsters);
+
     for(let i = 0; i<diceLocation.length; i++){
-        console.log(dice[i].active);
         if(dice[i].active){
+            dice[i].setTarget(monsters[0]);
             draw.drawStrokeRect(dice[i].x, dice[i].y, diceWidth, diceWidth, 'blue');
             draw.drawDot(dice[i]);
         }
@@ -237,7 +348,8 @@ function board(){
     } // draw empty dice space
 
     draw.drawFillRect(buttonX, buttonY, 200, 30, 'green' );
-    draw.drawText(15, 'white', 'Dice',buttonX, buttonY )
+    draw.drawText(15, 'white', 'Dice',buttonX, buttonY);
+
     // draw create dice button
 }
 
@@ -252,7 +364,7 @@ const Handler = {
     }
 }
 
-function getRandumNum(flag, num){
+function getRandomNum(flag, num){
     let index;
     let cnt = 0;
     while (1){
@@ -261,8 +373,8 @@ function getRandumNum(flag, num){
             return index;
         }
         cnt ++;
-        if(cnt === 10){
-            break;
+        if(cnt > 10){
+            return null;
         }
     }
 }// flag == 1: 1이상 num 이하 / flag == 0 : 0이상 num 미만
